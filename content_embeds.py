@@ -101,6 +101,22 @@ def _build_content_index(generator: object) -> None:
             _CONTENT_INDEX[normalized] = content
 
 
+def _transform_all_content(generators: Sequence[object]) -> None:
+    _CONTENT_INDEX.clear()
+
+    for generator in generators:
+        _build_content_index(generator)
+
+    seen: set[int] = set()
+    for generator in generators:
+        for content in _iter_generator_content(generator):
+            marker = id(content)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            _transform_content(content)
+
+
 def _is_heading(element: ET.Element) -> bool:
     return bool(re.fullmatch(r"h[1-6]", element.tag or ""))
 
@@ -159,8 +175,10 @@ def _resolve_card(anchor: ET.Element) -> Optional[Dict[str, object]]:
             _warn(f"Could not resolve content link '{href}'.")
         return None
 
+    link_text = _element_text(anchor)
+
     return {
-        "title": getattr(target, "title", _element_text(anchor)),
+        "title": link_text or getattr(target, "title", ""),
         "url": getattr(target, "url", anchor.attrib.get("href", "#")),
         "description": getattr(target, "summary", None),
         "tags": [getattr(tag, "name", str(tag)) for tag in getattr(target, "tags", []) or []],
@@ -294,6 +312,4 @@ def _transform_content(content: object) -> None:
 
 
 def register() -> None:
-    signals.article_generator_finalized.connect(_build_content_index)
-    signals.page_generator_finalized.connect(_build_content_index)
-    signals.content_object_init.connect(_transform_content)
+    signals.all_generators_finalized.connect(_transform_all_content)
